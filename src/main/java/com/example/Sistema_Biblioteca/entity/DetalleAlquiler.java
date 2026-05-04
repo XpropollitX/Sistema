@@ -4,28 +4,40 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
+/**
+ * Entidad que representa cada libro dentro de un alquiler.
+ */
 @Entity
-@Table (name = "detalle_alquiler")
+@Table(name = "detalle_alquileres")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class DetalleAlquiler {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long idDetalle;
+    @Column(name = "id_detalle_alquiler")
+    private Long idDetalleAlquiler;
 
-    private int cantidad;
-    private double precioUnitario;
-    private double subtotal;
+    @Column(nullable = false)
+    private Integer cantidad;
+
+    @Column(name = "precio_unitario", nullable = false, precision = 10, scale = 2)
+    private BigDecimal precioUnitario;
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal subtotal;
 
     @JsonIgnore
-    @ManyToOne
-    @JoinColumn(name = "id_alquiler")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_alquiler", nullable = false)
     private Alquiler alquiler;
 
-    @ManyToOne
-    @JoinColumn(name = "id_libro")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_libro", nullable = false)
     private Libro libro;
 }

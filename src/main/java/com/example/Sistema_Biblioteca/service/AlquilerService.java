@@ -1,10 +1,28 @@
 package com.example.Sistema_Biblioteca.service;
 
-import com.example.Sistema_Biblioteca.entity.*;
-import com.example.Sistema_Biblioteca.repository.*;
+import com.example.Sistema_Biblioteca.entity.Alquiler;
+import com.example.Sistema_Biblioteca.entity.DetalleAlquiler;
+import com.example.Sistema_Biblioteca.entity.Libro;
+import com.example.Sistema_Biblioteca.entity.Usuario;
+import com.example.Sistema_Biblioteca.enums.EstadoAlquiler;
+import com.example.Sistema_Biblioteca.enums.EstadoLibro;
+import com.example.Sistema_Biblioteca.exception.BusinessException;
+import com.example.Sistema_Biblioteca.exception.ResourceNotFoundException;
+import com.example.Sistema_Biblioteca.exception.StockInsuficienteException;
+import com.example.Sistema_Biblioteca.repository.AlquilerRepository;
+import com.example.Sistema_Biblioteca.repository.LibroRepository;
+import com.example.Sistema_Biblioteca.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+/**
+ * Servicio encargado de gestionar alquileres de libros.
+ * Aquí se valida stock, se calcula subtotal, total y se controla la devolución.
+ */
 @Service
 public class AlquilerService {
 
@@ -17,70 +35,90 @@ public class AlquilerService {
     @Autowired
     private LibroRepository libroRepository;
 
-
-        // GUARDAR ALQUILER
-
+    @Transactional
     public Alquiler guardarAlquiler(Alquiler alquiler) {
 
-        // 1. Validar usuario
         Usuario usuario = usuarioRepository.findById(alquiler.getUsuario().getIdUsuario())
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
 
-        alquiler.setUsuario(usuario);
-
-        // 2. Estado inicial
-        alquiler.setEstado("ACTIVO");
-
-        // 3. Recorrer detalles
-        for (DetalleAlquiler det : alquiler.getDetalles()) {
-
-            // 4. Obtener libro
-            Libro libro = libroRepository.findById(det.getLibro().getIdLibro())
-                    .orElseThrow(() -> new RuntimeException("Libro no encontrado"));
-
-            // 5. Validar stock
-            if (libro.getStock() < det.getCantidad()) {
-                throw new RuntimeException("Stock insuficiente para: " + libro.getTitulo());
-            }
-
-            // 6. Asignar precio alquiler
-            det.setPrecioUnitario(libro.getPrecioAlquiler());
-
-            // 7. Calcular subtotal
-            double subtotal = det.getCantidad() * det.getPrecioUnitario();
-            det.setSubtotal(subtotal);
-
-            // 8. Descontar stock
-            libro.setStock(libro.getStock() - det.getCantidad());
-            libroRepository.save(libro);
-
-            // 9. Relación detalle → alquiler
-            det.setAlquiler(alquiler);
+        if (alquiler.getDetalles() == null || alquiler.getDetalles().isEmpty()) {
+            throw new BusinessException("El alquiler debe tener al menos un detalle");
         }
 
-        // 10. Guardar todo
+        alquiler.setUsuario(usuario);
+        alquiler.setEstado(EstadoAlquiler.ACTIVO);
+
+        BigDecimal total = BigDecimal.ZERO;
+
+        for (DetalleAlquiler detalle : alquiler.getDetalles()) {
+
+            if (detalle.getCantidad() == null || detalle.getCantidad() <= 0) {
+                throw new BusinessException("La cantidad debe ser mayor a 0");
+            }
+
+            Libro libro = libroRepository.findById(detalle.getLibro().getIdLibro())
+                    .orElseThrow(() -> new ResourceNotFoundException("Libro no encontrado"));
+
+            if (!libro.getEstado().equals(EstadoLibro.DISPONIBLE)) {
+                throw new BusinessException("Libro no disponible: " + libro.getTitulo());
+            }
+
+            if (libro.getStock() < detalle.getCantidad()) {
+                throw new StockInsuficienteException("Sin stock disponible para: " + libro.getTitulo());
+            }
+
+            if (libro.getPrecioAlquiler() == null) {
+                throw new BusinessException("El libro no tiene precio de alquiler configurado: " + libro.getTitulo());
+            }
+
+            BigDecimal precioUnitario = libro.getPrecioAlquiler();
+
+            BigDecimal subtotal = precioUnitario.multiply(
+                    BigDecimal.valueOf(detalle.getCantidad())
+            );
+
+            detalle.setAlquiler(alquiler);
+            detalle.setLibro(libro);
+            detalle.setPrecioUnitario(precioUnitario);
+            detalle.setSubtotal(subtotal);
+
+            libro.setStock(libro.getStock() - detalle.getCantidad());
+
+            if (libro.getStock() == 0) {
+                libro.setEstado(EstadoLibro.AGOTADO);
+            }
+
+            total = total.add(subtotal);
+        }
+
+        alquiler.setTotal(total);
+
         return alquilerRepository.save(alquiler);
     }
 
-       // DEVOLVER ALQUILER
-
+    @Transactional
     public Alquiler devolverAlquiler(Long idAlquiler) {
 
-        // 1. Buscar alquiler
         Alquiler alquiler = alquilerRepository.findById(idAlquiler)
-                .orElseThrow(() -> new RuntimeException("Alquiler no encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Alquiler no encontrado"));
 
-        // 2. Devolver stock
-        for (DetalleAlquiler det : alquiler.getDetalles()) {
-            Libro libro = det.getLibro();
-            libro.setStock(libro.getStock() + det.getCantidad());
-            libroRepository.save(libro);
+        if (alquiler.getEstado().equals(EstadoAlquiler.DEVUELTO)) {
+            throw new BusinessException("El alquiler ya fue devuelto");
         }
 
-        // 3. Cambiar estado
-        alquiler.setEstado("DEVUELTO");
+        alquiler.setFechaDevolucion(LocalDate.now());
+        alquiler.setEstado(EstadoAlquiler.DEVUELTO);
 
-        // 4. Guardar cambios
+        for (DetalleAlquiler detalle : alquiler.getDetalles()) {
+            Libro libro = detalle.getLibro();
+
+            libro.setStock(libro.getStock() + detalle.getCantidad());
+
+            if (libro.getStock() > 0 && libro.getEstado().equals(EstadoLibro.AGOTADO)) {
+                libro.setEstado(EstadoLibro.DISPONIBLE);
+            }
+        }
+
         return alquilerRepository.save(alquiler);
     }
 }

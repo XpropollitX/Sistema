@@ -1,9 +1,22 @@
 package com.example.Sistema_Biblioteca.service;
 
-import com.example.Sistema_Biblioteca.entity.*;
-import com.example.Sistema_Biblioteca.repository.*;
+import com.example.Sistema_Biblioteca.entity.DetalleVenta;
+import com.example.Sistema_Biblioteca.entity.Libro;
+import com.example.Sistema_Biblioteca.entity.Usuario;
+import com.example.Sistema_Biblioteca.entity.Venta;
+import com.example.Sistema_Biblioteca.enums.EstadoLibro;
+import com.example.Sistema_Biblioteca.enums.EstadoVenta;
+import com.example.Sistema_Biblioteca.exception.BusinessException;
+import com.example.Sistema_Biblioteca.exception.ResourceNotFoundException;
+import com.example.Sistema_Biblioteca.exception.StockInsuficienteException;
+import com.example.Sistema_Biblioteca.repository.LibroRepository;
+import com.example.Sistema_Biblioteca.repository.UsuarioRepository;
+import com.example.Sistema_Biblioteca.repository.VentaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
 
 @Service
 public class VentaService {
@@ -17,40 +30,60 @@ public class VentaService {
     @Autowired
     private LibroRepository libroRepository;
 
+    @Transactional
     public Venta guardarVenta(Venta venta) {
 
         Usuario usuario = usuarioRepository.findById(venta.getUsuario().getIdUsuario())
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+
+        if (venta.getDetalles() == null || venta.getDetalles().isEmpty()) {
+            throw new BusinessException("La venta debe tener al menos un detalle");
+        }
 
         venta.setUsuario(usuario);
+        venta.setEstado(EstadoVenta.COMPLETADA);
 
-        double total = 0;
+        BigDecimal total = BigDecimal.ZERO;
 
-        for (DetalleVenta det : venta.getDetalles()) {
+        for (DetalleVenta detalle : venta.getDetalles()) {
 
-            Libro libro = libroRepository.findById(det.getLibro().getIdLibro())
-                    .orElseThrow(() -> new RuntimeException("Libro no encontrado"));
-
-            if (libro.getStock() < det.getCantidad()) {
-                throw new RuntimeException("Stock insuficiente");
+            if (detalle.getCantidad() == null || detalle.getCantidad() <= 0) {
+                throw new BusinessException("La cantidad debe ser mayor a 0");
             }
 
-            det.setPrecioUnitario(libro.getPrecioVenta());
+            Libro libro = libroRepository.findById(detalle.getLibro().getIdLibro())
+                    .orElseThrow(() -> new ResourceNotFoundException("Libro no encontrado"));
 
-            double subtotal = det.getCantidad() * det.getPrecioUnitario();
-            det.setSubtotal(subtotal);
+            if (!libro.getEstado().equals(EstadoLibro.DISPONIBLE)) {
+                throw new BusinessException("Libro no disponible: " + libro.getTitulo());
+            }
 
-            total += subtotal;
+            if (libro.getStock() < detalle.getCantidad()) {
+                throw new StockInsuficienteException("Sin stock disponible para: " + libro.getTitulo());
+            }
 
-            libro.setStock(libro.getStock() - det.getCantidad());
-            libroRepository.save(libro);
+            BigDecimal precioUnitario = libro.getPrecioVenta();
 
-            det.setVenta(venta);
+            BigDecimal subtotal = precioUnitario.multiply(
+                    BigDecimal.valueOf(detalle.getCantidad())
+            );
+
+            detalle.setVenta(venta);
+            detalle.setLibro(libro);
+            detalle.setPrecioUnitario(precioUnitario);
+            detalle.setSubtotal(subtotal);
+
+            libro.setStock(libro.getStock() - detalle.getCantidad());
+
+            if (libro.getStock() == 0) {
+                libro.setEstado(EstadoLibro.AGOTADO);
+            }
+
+            total = total.add(subtotal);
         }
 
         venta.setTotal(total);
 
         return ventaRepository.save(venta);
     }
-
 }
