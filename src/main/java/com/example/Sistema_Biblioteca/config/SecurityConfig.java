@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -22,10 +23,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
- * Configuración principal de seguridad.
- * Protege la API con JWT y roles para que Postman pueda consumir los endpoints.
- */
 @Configuration
 @EnableMethodSecurity
 @RequiredArgsConstructor
@@ -63,7 +60,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        .requestMatchers("GET", "/api/libros/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/libros/**").permitAll()
+
+                        .requestMatchers(HttpMethod.GET, "/usuarios/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/usuarios/**").permitAll()
+
+                        .requestMatchers(HttpMethod.GET, "/libros/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/libros/**").permitAll()
+
+                        .requestMatchers(HttpMethod.GET, "/ventas/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/ventas/**").permitAll()
 
                         .requestMatchers("/api/ventas/**")
                         .hasAnyAuthority("ROLE_CLIENT", "ROLE_EMPLEADO", "ROLE_ADMIN")
@@ -90,9 +96,7 @@ public class SecurityConfig {
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
-
         provider.setPasswordEncoder(passwordEncoder());
-
         return provider;
     }
 
