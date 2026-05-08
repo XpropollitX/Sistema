@@ -60,19 +60,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/api/libros/**").permitAll()
-
                         .requestMatchers(HttpMethod.GET, "/usuarios/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/usuarios/**").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/libros/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/libros/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/libros/**")
+                        .hasAuthority("ROLE_ADMIN")
 
                         .requestMatchers(HttpMethod.GET, "/ventas/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/ventas/**").permitAll()
-
-                        .requestMatchers("/api/ventas/**")
-                        .hasAnyAuthority("ROLE_CLIENT", "ROLE_EMPLEADO", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/ventas/**")
+                        .hasAnyAuthority("ROLE_ADMIN", "ROLE_EMPLEADO")
 
                         .requestMatchers("/api/empleado/**")
                         .hasAnyAuthority("ROLE_EMPLEADO", "ROLE_ADMIN")

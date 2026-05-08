@@ -1,5 +1,6 @@
 package com.example.Sistema_Biblioteca.controller;
 
+import com.example.Sistema_Biblioteca.dto.response.VentaResponse;
 import com.example.Sistema_Biblioteca.entity.Venta;
 import com.example.Sistema_Biblioteca.exception.BusinessException;
 import com.example.Sistema_Biblioteca.repository.VentaRepository;
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/ventas")
+@RequestMapping("/api/ventas")
 public class VentaController {
 
     @Autowired
@@ -20,8 +21,8 @@ public class VentaController {
     private VentaRepository ventaRepository;
 
     @GetMapping
-    public List<Venta> listarVentas() {
-        return ventaRepository.findAll();
+    public List<VentaResponse> listarVentas() {
+        return ventaService.listarVentas();
     }
 
     @PostMapping

@@ -1,5 +1,8 @@
 package com.example.Sistema_Biblioteca.service;
 
+import com.example.Sistema_Biblioteca.dto.response.ClienteResumenResponse;
+import com.example.Sistema_Biblioteca.dto.response.DetalleVentaResponse;
+import com.example.Sistema_Biblioteca.dto.response.VentaResponse;
 import com.example.Sistema_Biblioteca.entity.DetalleVenta;
 import com.example.Sistema_Biblioteca.entity.Libro;
 import com.example.Sistema_Biblioteca.entity.Usuario;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 public class VentaService {
@@ -29,6 +33,40 @@ public class VentaService {
 
     @Autowired
     private LibroRepository libroRepository;
+
+    @Transactional(readOnly = true)
+    public List<VentaResponse> listarVentas() {
+
+        return ventaRepository.findAll().stream().map(v -> {
+
+            ClienteResumenResponse cliente = new ClienteResumenResponse(
+                    v.getUsuario().getIdUsuario(),
+                    v.getUsuario().getNombre(),
+                    v.getUsuario().getEmail()
+            );
+
+            List<DetalleVentaResponse> detalles = v.getDetalles().stream()
+                    .map(d -> new DetalleVentaResponse(
+                            d.getLibro().getIdLibro(),
+                            d.getLibro().getTitulo(),
+                            d.getLibro().getAutor(),
+                            d.getCantidad(),
+                            d.getPrecioUnitario(),
+                            d.getSubtotal()
+                    ))
+                    .toList();
+
+            return new VentaResponse(
+                    v.getIdVenta(),
+                    v.getEstado(),
+                    v.getTotal(),
+                    v.getCreadoEn(),
+                    cliente,
+                    detalles,
+                    "OK"
+            );
+        }).toList();
+    }
 
     @Transactional
     public Venta guardarVenta(Venta venta) {

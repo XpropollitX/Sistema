@@ -12,6 +12,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class ClienteResumenResponse {
 
+    private Long idUsuario;
     private String nombre;
     private String email;
 }
